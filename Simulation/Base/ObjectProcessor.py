@@ -4,6 +4,8 @@ from tqdm import tqdm
 from functools import reduce
 from ..Utils import SimConfig
 
+PI = 3.1415926
+
 def fluid_body_processor(dim, config: SimConfig,diameter):
     fluid_bodies = config.get_fluid_bodies()
     fluid_body_num = 0
@@ -20,7 +22,7 @@ def load_fluid_body(dim, rigid_body, pitch):
         mesh.apply_scale(rigid_body["scale"])
         offset = np.array(rigid_body["translation"])
 
-        angle = rigid_body["rotationAngle"] / 360 * 2 * 3.1415926
+        angle = rigid_body["rotationAngle"] / 360 * 2 * PI
         direction = rigid_body["rotationAxis"]
         rot_matrix = tm.transformations.rotation_matrix(angle, direction, mesh.vertices.mean(axis=0))
         mesh.apply_transform(rot_matrix)
@@ -73,7 +75,7 @@ def load_rigid_body(rigid_body, pitch):
         if rigid_body["isDynamic"] == False:
             # for static rigid body, we will not run renew_rigid_particle_state function. So we put them in the right place here
             offset = np.array(rigid_body["translation"])
-            angle = rigid_body["rotationAngle"] / 360 * 2 * 3.1415926
+            angle = rigid_body["rotationAngle"] / 360 * 2 * PI
             direction = rigid_body["rotationAxis"]
             rot_matrix = tm.transformations.rotation_matrix(angle, direction, mesh.vertices.mean(axis=0))
             mesh.apply_transform(rot_matrix)
