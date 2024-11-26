@@ -1,6 +1,6 @@
 import taichi as ti
 import numpy as np
-from ..Base import BaseContainer
+from ..Base.BaseContainer import BaseContainer
 from .utils import *
 from .boundary import Boundary
 
@@ -111,7 +111,7 @@ class BaseSolver():
             if self.container.particle_is_dynamic[p_j]:
                 # add force and torque to rigid body
                 object_j = self.container.particle_object_ids[p_j]
-                center_of_mass_j = self.container.rigid_body_centers_of_mass[object_j]
+                center_of_mass_j = self.container.rigid_body_com[object_j]
                 force_j = self.density_0 * self.container.particle_rest_volumes[p_j] * pressure_term * nabla_ij * self.density_0 * self.container.particle_rest_volumes[p_i]
                 torque_j = ti.math.cross(pos_i - center_of_mass_j, force_j)
                 self.container.rigid_body_forces[object_j] += force_j
@@ -143,7 +143,7 @@ class BaseSolver():
         pos_i = self.container.particle_positions[p_i]
         if self.container.particle_materials[p_j] == self.container.material_fluid:
             # Fluid neighbors
-            diameter2 = self.container.particle_diameter * self.container.particle_diameter
+            diameter2 = self.container.diameter * self.container.diameter
             pos_j = self.container.particle_positions[p_j]
             R = pos_i - pos_j
             R2 = R.norm_sqr()
@@ -151,7 +151,7 @@ class BaseSolver():
             if R2 > diameter2:
                 weight = self.kernel.weight(R.norm(), self.container.dh)
             else:
-                weight = self.kernel.weight(self.container.particle_diameter, self.container.dh)
+                weight = self.kernel.weight(self.container.diameter, self.container.dh)
             ret -= self.surface_tension * mass_ratio * R * weight
 
     @ti.kernel
@@ -194,7 +194,7 @@ class BaseSolver():
 
             if self.container.particle_is_dynamic[p_j]:
                 object_j = self.container.particle_object_ids[p_j]
-                center_of_mass_j = self.container.rigid_body_centers_of_mass[object_j]
+                center_of_mass_j = self.container.rigid_body_com[object_j]
                 force_j =  - acc * self.container.particle_masses[p_i] / self.density_0
                 self.container.rigid_body_forces[object_j] += force_j
                 self.container.rigid_body_torques[object_j] += ti.math.cross(pos_j - center_of_mass_j, force_j)
@@ -228,11 +228,11 @@ class BaseSolver():
             if self.container.particle_materials[p_i] == self.container.material_rigid and self.container.particle_is_dynamic[p_i]:
                 object_id = self.container.particle_object_ids[p_i]
                 if self.container.rigid_body_is_dynamic[object_id]:
-                    center_of_mass = self.container.rigid_body_centers_of_mass[object_id]
+                    center_of_mass = self.container.rigid_body_com[object_id]
                     rotation = self.container.rigid_body_rotations[object_id]
                     velocity = self.container.rigid_body_velocities[object_id]
                     angular_velocity = self.container.rigid_body_angular_velocities[object_id]
-                    q = self.container.rigid_particle_original_positions[p_i] - self.container.rigid_body_original_centers_of_mass[object_id]
+                    q = self.container.rigid_particle_original_positions[p_i] - self.container.rigid_body_original_com[object_id]
                     p = rotation @ q
                     self.container.particle_positions[p_i] = center_of_mass + p
                     self.container.particle_velocities[p_i] = velocity + ti.math.cross(angular_velocity, p)
@@ -243,7 +243,7 @@ class BaseSolver():
         if self.cfg.get_cfg("exportObj"):
             for obj_i in range(self.container.object_num[None]):
                 if self.container.rigid_body_is_dynamic[obj_i] and self.container.object_materials[obj_i] == self.container.material_rigid:
-                    center_of_mass = self.container.rigid_body_centers_of_mass[obj_i]
+                    center_of_mass = self.container.rigid_body_com[obj_i]
                     rotation = self.container.rigid_body_rotations[obj_i]
                     ret = rotation.to_numpy() @ (self.container.object_collection[obj_i]["restPosition"] - self.container.object_collection[obj_i]["restCenterOfMass"]).T
                     self.container.object_collection[obj_i]["mesh"].vertices = ret.T + center_of_mass.to_numpy()
@@ -301,7 +301,7 @@ class BaseSolver():
         print("renewing rigid particle state")
         self.renew_rigid_particle_state()
         print("preparing neighborhood search")
-        self.container.prepare_neighborhood_search()
+        self.container.prepare_neighbor_search()
         print("computing volume")
         self.compute_rigid_particle_volume()
         print("preparing finished")

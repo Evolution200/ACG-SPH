@@ -2,7 +2,7 @@ import taichi as ti
 import numpy as np
 import math
 from typing import Tuple
-from ..Base import BaseContainer
+from ..containers.base_container import BaseContainer
 
 @ti.data_oriented
 class RigidSolver():
@@ -27,7 +27,7 @@ class RigidSolver():
             self.init_rigid_block(rigid_block)
 
     def create_boundary(self, thickness: float = 0.01):
-        eps = self.container.particle_diameter + self.container.domain_box_thickness 
+        eps = self.container.diameter + self.container.boundary_thickness 
         domain_start = self.container.domain_start
         domain_end = self.container.domain_end
 
@@ -62,8 +62,8 @@ class RigidSolver():
             self.rigid_body_scales[index] = np.array(rigid_body["scale"], dtype=np.float32)
             self.container.rigid_body_velocities[index] = np.array(rigid_body["velocity"], dtype=np.float32)
             self.container.rigid_body_angular_velocities[index] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-            self.container.rigid_body_original_centers_of_mass[index] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-            self.container.rigid_body_centers_of_mass[index] = np.array(rigid_body["translation"])
+            self.container.rigid_body_original_com[index] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+            self.container.rigid_body_com[index] = np.array(rigid_body["translation"])
             self.container.rigid_body_rotations[index] = np.array([[cy * cz, -cy * sz, sy], [sx * sy * cz + cx * sz, -sx * sy * sz + cx * cz, -sx * cy], [-cx * sy * cz + sx * sz, cx * sy * sz + sx * cz, cx * cy]])
 
         self.present_rigid_object.append(index)
@@ -78,7 +78,7 @@ class RigidSolver():
         self.container.rigid_body_angular_velocities[index] += self.container.rigid_body_torques[index] / (0.4 * self.container.rigid_body_masses[index] * (self.rigid_body_scales[index][0]**2 + self.rigid_body_scales[index][1]**2+ self.rigid_body_scales[index][2]**2)) * self.dt
 
     def update_position(self, index):
-        self.container.rigid_body_centers_of_mass[index] += self.container.rigid_body_velocities[index] * self.dt
+        self.container.rigid_body_com[index] += self.container.rigid_body_velocities[index] * self.dt
     
         rotation_vector = self.container.rigid_body_angular_velocities[index] * self.dt
 
@@ -98,6 +98,7 @@ class RigidSolver():
         
 
     def step(self):
+        print(self.container.object_num[None])
         for index in range(self.container.object_num[None]):
             if self.container.rigid_body_is_dynamic[index] and self.container.object_materials[index] == self.container.material_rigid:
                 self.update_velocity(index)
@@ -111,7 +112,7 @@ class RigidSolver():
         # ! here we use the information of base frame. We assume the center of mass is exactly the base position.
         linear_velocity = self.container.rigid_body_velocities[index]
         angular_velocity = self.container.rigid_body_angular_velocities[index]
-        position = self.container.rigid_body_centers_of_mass[index]
+        position = self.container.rigid_body_com[index]
         rotation_matrix = self.container.rigid_body_rotations[index]
         
         return {
