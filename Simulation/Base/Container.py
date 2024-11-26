@@ -2,7 +2,7 @@ import taichi as ti
 import numpy as np
 from . import ObjectProcessor as op
 from functools import reduce
-from ..utils import SimConfig
+from ..Utils import SimConfig
 
 GRAVITY = ti.Vector([0.0, -9.81, 0.0])
 
