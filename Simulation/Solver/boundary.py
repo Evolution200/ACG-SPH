@@ -1,7 +1,7 @@
 import taichi as ti
 import numpy as np
 import math
-from ..Base import BaseContainer
+from ..Base.BaseContainer import BaseContainer
 from .utils import *
 
 @ti.data_oriented
