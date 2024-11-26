@@ -12,19 +12,12 @@ class RigidSolver():
         self.present_rigid_object = []
         self.rigid_body_scales = {}
         self.gravity = np.array(gravity)
-        assert container.dim == 3, "PyBulletSolver only supports 3D simulation currently"
 
         self.cfg = container.cfg
         self.rigid_bodies = self.cfg.get_rigid_bodies()
         self.rigid_blocks = self.cfg.get_rigid_blocks()
         num_rigid_bodies = len(self.rigid_bodies) + len(self.rigid_blocks)
         self.dt = dt
-
-        # mapping between container index and bullet index
-        self.container_idx_to_bullet_idx = {}
-        self.bullet_idx_to_container_idx = {}
-
-        # we insert rigid body in the solver each round. so we do not call insert_rigid_object here.
 
     def insert_rigid_object(self):
         for rigid_body in self.rigid_bodies:
@@ -34,7 +27,6 @@ class RigidSolver():
             self.init_rigid_block(rigid_block)
 
     def create_boundary(self, thickness: float = 0.01):
-        # we do not want the rigid to hit the boundary of fluid so we move each wall inside a little bit.
         eps = self.container.particle_diameter + self.container.domain_box_thickness 
         domain_start = self.container.domain_start
         domain_end = self.container.domain_end
@@ -43,10 +35,10 @@ class RigidSolver():
         self.end = np.array(domain_end) - eps
 
     def init_rigid_body(self, rigid_body):
-        container_idx = rigid_body["objectId"]
+        index = rigid_body["objectId"]
 
         # dealing with entry time
-        if container_idx in self.present_rigid_object:
+        if index in self.present_rigid_object:
             return
         if rigid_body["entryTime"] > self.total_time:
             return
@@ -67,18 +59,17 @@ class RigidSolver():
             cx, cy, cz = np.cos(euler)
             sx, sy, sz = np.sin(euler)
 
-            self.rigid_body_scales[container_idx] = np.array(rigid_body["scale"], dtype=np.float32)
-            self.container.rigid_body_velocities[container_idx] = np.array(rigid_body["velocity"], dtype=np.float32)
-            self.container.rigid_body_angular_velocities[container_idx] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-            self.container.rigid_body_original_centers_of_mass[container_idx] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-            self.container.rigid_body_centers_of_mass[container_idx] = np.array(rigid_body["translation"])
-            self.container.rigid_body_rotations[container_idx] = np.array([[cy * cz, -cy * sz, sy], [sx * sy * cz + cx * sz, -sx * sy * sz + cx * cz, -sx * cy], [-cx * sy * cz + sx * sz, cx * sy * sz + sx * cz, cx * cy]])
+            self.rigid_body_scales[index] = np.array(rigid_body["scale"], dtype=np.float32)
+            self.container.rigid_body_velocities[index] = np.array(rigid_body["velocity"], dtype=np.float32)
+            self.container.rigid_body_angular_velocities[index] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+            self.container.rigid_body_original_centers_of_mass[index] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+            self.container.rigid_body_centers_of_mass[index] = np.array(rigid_body["translation"])
+            self.container.rigid_body_rotations[index] = np.array([[cy * cz, -cy * sz, sy], [sx * sy * cz + cx * sz, -sx * sy * sz + cx * cz, -sx * cy], [-cx * sy * cz + sx * sz, cx * sy * sz + sx * cz, cx * cy]])
 
-        self.present_rigid_object.append(container_idx)
+        self.present_rigid_object.append(index)
         
     def init_rigid_block(self, rigid_block):
-        # TODO enable adding rigid block
-        raise NotImplementedError
+        pass
 
     def update_velocity(self, index):
         self.container.rigid_body_velocities[index] += self.gravity * self.dt + self.container.rigid_body_forces[index] / self.container.rigid_body_masses[index] * self.dt
@@ -116,13 +107,12 @@ class RigidSolver():
                 self.container.rigid_body_torques[index] = np.array([0.0, 0.0, 0.0])
 
 
-    def get_rigid_body_states(self, container_idx):
+    def get_rigid_body_states(self, index):
         # ! here we use the information of base frame. We assume the center of mass is exactly the base position.
-        bullet_idx = self.container_idx_to_bullet_idx[container_idx]
-        linear_velocity = self.container.rigid_body_velocities[container_idx]
-        angular_velocity = self.container.rigid_body_angular_velocities[container_idx]
-        position = self.container.rigid_body_centers_of_mass[container_idx]
-        rotation_matrix = self.container.rigid_body_rotations[container_idx]
+        linear_velocity = self.container.rigid_body_velocities[index]
+        angular_velocity = self.container.rigid_body_angular_velocities[index]
+        position = self.container.rigid_body_centers_of_mass[index]
+        rotation_matrix = self.container.rigid_body_rotations[index]
         
         return {
             "linear_velocity": linear_velocity,
