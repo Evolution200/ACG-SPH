@@ -2,6 +2,7 @@ import taichi as ti
 import numpy as np
 from ..Base import BaseContainer
 from .utils import *
+from .boundary import Boundary
 
 
 @ti.data_oriented
@@ -37,6 +38,9 @@ class BaseSolver():
 
         # kernel
         self.kernel = CubicKernel()
+
+        # boundary
+        self.boundary = Boundary(self.container)
 
         # others
         if self.container.cfg.get_cfg("gravitationUpper"):
@@ -194,3 +198,116 @@ class BaseSolver():
                 force_j =  - acc * self.container.particle_masses[p_i] / self.density_0
                 self.container.rigid_body_forces[object_j] += force_j
                 self.container.rigid_body_torques[object_j] += ti.math.cross(pos_j - center_of_mass_j, force_j)
+
+    @ti.kernel
+    def compute_density(self):
+        """
+        compute density for each particle from mass of neighbors in SPH standard way.
+        """
+        for p_i in range(self.container.particle_num[None]):
+            if self.container.particle_materials[p_i] == self.container.material_fluid:
+                self.container.particle_densities[p_i] = self.container.particle_rest_volumes[p_i] * self.kernel.weight(0.0, self.container.dh)
+                ret_i = 0.0
+                self.container.for_all_neighbors(p_i, self.compute_density_task, ret_i)
+                self.container.particle_densities[p_i] += ret_i
+                self.container.particle_densities[p_i] *= self.density_0
+
+    @ti.func
+    def compute_density_task(self, p_i, p_j, ret: ti.template()):
+        # Fluid neighbors and rigid neighbors are treated the same
+        pos_i = self.container.particle_positions[p_i]
+        pos_j = self.container.particle_positions[p_j]
+        R = pos_i - pos_j
+        R_mod = R.norm()
+        ret += self.container.particle_rest_volumes[p_j] * self.kernel.weight(R_mod, self.container.dh)
+
+    @ti.kernel
+    def _renew_rigid_particle_state(self):
+        # update rigid particle state from rigid body state updated by the rigid solver
+        for p_i in range(self.container.particle_num[None]):
+            if self.container.particle_materials[p_i] == self.container.material_rigid and self.container.particle_is_dynamic[p_i]:
+                object_id = self.container.particle_object_ids[p_i]
+                if self.container.rigid_body_is_dynamic[object_id]:
+                    center_of_mass = self.container.rigid_body_centers_of_mass[object_id]
+                    rotation = self.container.rigid_body_rotations[object_id]
+                    velocity = self.container.rigid_body_velocities[object_id]
+                    angular_velocity = self.container.rigid_body_angular_velocities[object_id]
+                    q = self.container.rigid_particle_original_positions[p_i] - self.container.rigid_body_original_centers_of_mass[object_id]
+                    p = rotation @ q
+                    self.container.particle_positions[p_i] = center_of_mass + p
+                    self.container.particle_velocities[p_i] = velocity + ti.math.cross(angular_velocity, p)
+
+    def renew_rigid_particle_state(self):
+        self._renew_rigid_particle_state()
+        
+        if self.cfg.get_cfg("exportObj"):
+            for obj_i in range(self.container.object_num[None]):
+                if self.container.rigid_body_is_dynamic[obj_i] and self.container.object_materials[obj_i] == self.container.material_rigid:
+                    center_of_mass = self.container.rigid_body_centers_of_mass[obj_i]
+                    rotation = self.container.rigid_body_rotations[obj_i]
+                    ret = rotation.to_numpy() @ (self.container.object_collection[obj_i]["restPosition"] - self.container.object_collection[obj_i]["restCenterOfMass"]).T
+                    self.container.object_collection[obj_i]["mesh"].vertices = ret.T + center_of_mass.to_numpy()
+
+    @ti.kernel
+    def update_fluid_velocity(self):
+        """
+        update velocity for each particle from acceleration
+        """
+        for p_i in range(self.container.particle_num[None]):
+            if self.container.particle_materials[p_i] == self.container.material_fluid:
+                self.container.particle_velocities[p_i] += self.dt[None] * self.container.particle_accelerations[p_i]
+
+    @ti.kernel
+    def update_fluid_position(self):
+        """
+        update position for each particle from velocity
+        """
+        for p_i in range(self.container.particle_num[None]):
+            if self.container.particle_materials[p_i] == self.container.material_fluid:
+                self.container.particle_positions[p_i] += self.dt[None] * self.container.particle_velocities[p_i]
+
+            elif self.container.particle_positions[p_i][1] > self.g_upper:
+                # the emitter part
+                obj_id = self.container.particle_object_ids[p_i]
+                if self.container.object_materials[obj_id] == self.container.material_fluid:
+                    self.container.particle_positions[p_i] += self.dt[None] * self.container.particle_velocities[p_i]
+                    if self.container.particle_positions[p_i][1] <= self.g_upper:
+                        self.container.particle_materials[p_i] = self.container.material_fluid
+        
+            
+    @ti.kernel
+    def prepare_emitter(self):
+        for p_i in range(self.container.particle_num[None]):
+            if self.container.particle_materials[p_i] == self.container.material_fluid:
+                if self.container.particle_positions[p_i][1] > self.g_upper:
+                    # an awful hack to realize emitter
+                    # not elegant but works
+                    # feel free to implement your own emitter
+                    self.container.particle_materials[p_i] = self.container.material_rigid
+
+    @ti.kernel
+    def init_object_id(self):
+        self.container.particle_object_ids.fill(-1)
+
+    def prepare(self):
+        print("initializing object id")
+        self.init_object_id()
+        print("inserting object")
+        self.container.insert_object()
+        print("inserting emitter")
+        self.prepare_emitter()
+        print("inserting rigid object")
+        self.rigid_solver.insert_rigid_object()
+        print("renewing rigid particle state")
+        self.renew_rigid_particle_state()
+        print("preparing neighborhood search")
+        self.container.prepare_neighborhood_search()
+        print("computing volume")
+        self.compute_rigid_particle_volume()
+        print("preparing finished")
+
+    def step(self):
+        self._step()
+        self.container.total_time += self.dt[None]
+        self.rigid_solver.total_time += self.dt[None]
+        self.compute_rigid_particle_volume()
