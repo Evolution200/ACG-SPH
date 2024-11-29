@@ -1,6 +1,6 @@
 import taichi as ti
 import numpy as np
-from ..Base.BaseContainer import BaseContainer
+from ..Base import BaseContainer
 from .utils import *
 from .boundary import Boundary
 
@@ -58,6 +58,8 @@ class BaseSolver():
                     self.container.for_all_neighbors(p_i, self.compute_rigid_particle_volumn_task, ret)
                     self.container.particle_rest_volumes[p_i] = 1.0 / ret 
                     self.container.particle_masses[p_i] = self.density_0 * self.container.particle_rest_volumes[p_i]
+            else:
+                self.container.particle_masses[p_i] = self.density * self.container.particle_rest_volumes[p_i]
 
     @ti.func
     def compute_rigid_particle_volumn_task(self, p_i, p_j, ret: ti.template()):
