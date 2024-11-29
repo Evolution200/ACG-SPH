@@ -2,7 +2,7 @@ import numpy as np
 import trimesh as tm
 from tqdm import tqdm
 from functools import reduce
-from ..utils import SimConfig
+from ..Utils import SimConfig
 
 PI = 3.1415926
 

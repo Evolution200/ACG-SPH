@@ -2,7 +2,7 @@ import taichi as ti
 import numpy as np
 import math
 from typing import Tuple
-from ..Base.BaseContainer import BaseContainer
+from ..Base.Container import BaseContainer
 
 @ti.data_oriented
 class RigidSolver():
