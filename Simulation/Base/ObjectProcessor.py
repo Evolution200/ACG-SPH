@@ -2,11 +2,11 @@ import numpy as np
 import trimesh as tm
 from tqdm import tqdm
 from functools import reduce
-from ..Utils import SimConfig
+from ..utils import SimConfig
 
 PI = 3.1415926
 
-def fluid_body_processor(dim, config: SimConfig,diameter):
+def fluid_body_processor(dim, config: SimConfig, diameter):
     fluid_bodies = config.get_fluid_bodies()
     fluid_body_num = 0
     for fluid_body in fluid_bodies:
@@ -73,7 +73,6 @@ def load_rigid_body(rigid_body, pitch):
         mesh.apply_scale(rigid_body["scale"])
 
         if rigid_body["isDynamic"] == False:
-            # for static rigid body, we will not run renew_rigid_particle_state function. So we put them in the right place here
             offset = np.array(rigid_body["translation"])
             angle = rigid_body["rotationAngle"] / 360 * 2 * PI
             direction = rigid_body["rotationAxis"]
@@ -85,15 +84,12 @@ def load_rigid_body(rigid_body, pitch):
         mesh_backup = mesh.copy()
         rigid_body["mesh"] = mesh_backup
         rigid_body["restPosition"] = mesh_backup.vertices
-        rigid_body["restCenterOfMass"] = np.array([0.0, 0.0, 0.0]) # ! if the center of mass is not exactly the base frame center, this will lead to error
+        rigid_body["restCenterOfMass"] = np.array([0.0, 0.0, 0.0]) 
 
         voxelized_mesh = mesh.voxelized(pitch=pitch)
         voxelized_mesh = mesh.voxelized(pitch=pitch).fill()
-        # voxelized_mesh = mesh.voxelized(pitch=self.particle_diameter).hollow()
         voxelized_points_np = voxelized_mesh.points
         print(f"rigid body {obj_id} num: {voxelized_points_np.shape[0]}")
-
-        # voxelized_points_np = tm.sample.sample_surface_even(mesh, 4000)[0]
         
         return voxelized_points_np
 
@@ -116,7 +112,6 @@ def compute_cube_particle_num(dim, domain_start, domain_end, space):
 
 def compute_box_particle_num(dim, domain_start, domain_end, diameter, thickness):
         num_dim = []
-        box_size = domain_end - domain_start
         for i in range(dim):
             num_dim.append(
                 np.arange(domain_start[i], domain_end[i], diameter))
